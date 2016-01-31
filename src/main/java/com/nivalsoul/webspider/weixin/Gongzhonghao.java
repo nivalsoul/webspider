@@ -35,16 +35,18 @@ public class Gongzhonghao {
 	/**'
 	 * 启动抓取文章的定时器
 	 * @param dbconfig 数据库连接配置，参数为Map格式,包含的key说明如下：<br/>
-	 * <strong>driver</strong>       :驱动类名<br/>
-	 * <strong>url</strong>            :连接url<br/>
-	 * <strong>userName</strong>:用户名<br/>
-	 * <strong>password</strong> :密码<br/>
+	 * --<strong>driver</strong>       :驱动类名<br/>
+	 * --<strong>url</strong>            :连接url<br/>
+	 * --<strong>userName</strong>:用户名<br/>
+	 * --<strong>password</strong> :密码<br/>
 	 * <br/>
 	 * @param hour 定时器的时
 	 * @param minute 定时器的分
 	 * @param second 定时器的秒
+	 * @param period 调度周期（毫秒）
 	 */
-	 public static void startTimer(Map<String, String> dbconfig, int hour, int minute, int second) {
+	 public static void startTimer(Map<String, String> dbconfig, 
+			 int hour, int minute, int second, long period) {
 		System.out.println("调用了定时器...");
 		config = new HashMap<String, String>(dbconfig);
 		Calendar calendar = Calendar.getInstance();
@@ -64,7 +66,7 @@ public class Gongzhonghao {
 					e.printStackTrace();
 				}
 			}
-		}, time, 1000 * 60 * 60 * 24);// 这里设定将延时每天固定执行
+		}, time, period);// 这里设定将延时每天固定执行
 	}
 
 	// 从搜狗获取微信最热文章
