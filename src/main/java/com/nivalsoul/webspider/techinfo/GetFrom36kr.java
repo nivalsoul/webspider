@@ -11,12 +11,15 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import org.apache.commons.io.FileUtils;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.nutz.dao.Cnd;
 import org.nutz.dao.Dao;
+import org.nutz.json.Json;
 
 import com.gargoylesoftware.htmlunit.BrowserVersion;
 import com.gargoylesoftware.htmlunit.NicelyResynchronizingAjaxController;
@@ -28,6 +31,8 @@ import com.nivalsoul.webspider.dao.DaoFactory;
 import com.nivalsoul.webspider.entity.Article;
 import com.nivalsoul.webspider.entity.TechInfo;
 import com.nivalsoul.webspider.util.DateUtil;
+import com.nivalsoul.webspider.util.HttpTool;
+import com.nivalsoul.webspider.util.HttpUtil;
 
 
 /**
@@ -37,10 +42,10 @@ import com.nivalsoul.webspider.util.DateUtil;
  */
 public class GetFrom36kr {
 	static Dao dao = null;
-	static String[] types = {"最新", "深度","行研"};
-	static String[] urls = {"http://36kr.com/",
-			"http://36kr.com/columns/deep",
-			"http://36kr.com/columns/research"};
+	static String[] types = {"最新", "深度","研究"};
+	static String[] urls = {"http://36kr.com/asynces/posts/info_flow_post_more.json?",
+			"http://36kr.com/asynces/posts/feed_column_more.json?column=deep&",
+			"http://36kr.com/asynces/posts/feed_column_more.json?column=research&"};
 	
 	public static void main(String[] args) throws Exception {
 		work();
@@ -88,11 +93,13 @@ public class GetFrom36kr {
 
 	private static void work() throws Exception {
 		dao = DaoFactory.getDao(config);
-		for(int i=0;i<2;i++){
+		for(int i=0;i<3;i++){
 			String url = urls[i];
+			String b_url_code = "";
+			if(i==0) b_url_code = "b_url_code=0";
 			int k=0;
-			while(k<5){
-				url = getArticlesFrom36kr(url);
+			while(k<10){
+				b_url_code = getArticlesFrom36krByJson(url,b_url_code);
 				k++;
 			}
 		}
@@ -100,6 +107,69 @@ public class GetFrom36kr {
 		System.out.println("抓取任务结束！");
 	}
 
+	/**
+	 * 获取36氪文章，返回下一页链接
+	 * @param url
+	 * @param b_url_code 
+	 * @return
+	 * @throws Exception
+	 */
+	private static String getArticlesFrom36krByJson(String url, String b_url_code) throws Exception {
+		String result = HttpTool.get(url+b_url_code);
+		JSONObject jObject = new JSONObject(result);
+		JSONObject status = jObject.getJSONObject("status");
+		if(status.get("code").equals("200")){
+			JSONObject data = jObject.getJSONObject("data");
+			JSONArray feed_posts = data.getJSONArray("feed_posts");
+			System.out.println("访问："+url+b_url_code);
+			System.out.println("文章数："+feed_posts.length());
+			for(int i=0;i<feed_posts.length();i++){
+				try {
+					JSONObject article = feed_posts.getJSONObject(i);
+					String title = article.getString("title");
+					String link = "http://36kr.com/p/"+article.getLong("url_code")+".html";
+					JSONObject authorInfo = article.getJSONObject("author");
+					String author = authorInfo.getString("display_name");
+					String authorLink = "";
+					if(authorInfo.get("domain_path")!=null){
+						authorLink = authorInfo.get("domain_path").toString();
+					}
+					if(authorLink.startsWith("/"))
+						authorLink =  "http://36kr.com"+authorLink;
+					String time = article.getString("published_at");
+					time = time.replaceAll("T", " ").split("[.]")[0];
+					Timestamp pubTime = DateUtil.getTimestamp(time);
+					String summary = article.getString("plain_summary");
+					if(article.has("summary")){
+						summary = article.getString("summary");
+					}
+					JSONObject column = article.getJSONObject("column");
+					String type = column.getString("name");
+					b_url_code = "b_url_code="+article.get("url_code");
+					TechInfo a = dao.fetch(TechInfo.class, Cnd.where("article_link", "=", link));
+					if(a==null){
+						TechInfo info = new TechInfo();
+						info.setSource("36氪");
+						info.setArticle_type(type);
+						info.setArticle_title(title);
+						info.setArticle_content(summary);
+						info.setArticle_link(link);
+						info.setAuthor(author);
+						info.setAuthor_link(authorLink);
+						info.setOriginal((byte) 0);
+						info.setComment_num(0);
+						info.setPub_time(pubTime);
+						dao.insert(info);
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		
+		//下一页链接
+		return b_url_code;
+	}
 	/**
 	 * 获取36氪文章，返回下一页链接
 	 * @param url
